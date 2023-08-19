@@ -72,11 +72,28 @@ controls.screenSpacePanning = true // pan orthogonal to world-space direction ca
 controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
 controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_ROTATE }
 
+let spacePress = false
+window.addEventListener('keydown', (e) => {
+  if (e.code == 'Space') { spacePress = true }
+})
+window.addEventListener('keyup', (e) => {
+  if (e.code == 'Space') { spacePress = false }
+})
+
+let mousePress = false
+window.addEventListener('mousedown', (e) => {
+  mousePress = true
+})
+window.addEventListener('mouseup', (e) => {
+  mousePress = false
+})
+
 const mouse = new THREE.Vector2()
 const raycaster = new THREE.Raycaster()
 window.addEventListener('mousedown', (event) => {
     mouse.x = event.clientX / sizes.width * 2 - 1
     mouse.y = - (event.clientY / sizes.height) * 2 + 1
+    if (!spacePress) return
 
     raycaster.setFromCamera(mouse, camera)
     const intersects = raycaster.intersectObjects( meshes )
@@ -91,11 +108,44 @@ window.addEventListener('mousedown', (event) => {
         if (mode === 'grid layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
 
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mm)
+        plane.userData.mode = mode
         scene.add(plane)
         plane.position.set(pos.x, pos.y, 0)
+        meshes.push(plane)
 
         tick()
     }
+})
+window.addEventListener('mousemove', (event) => {
+  mouse.x = event.clientX / sizes.width * 2 - 1
+  mouse.y = - (event.clientY / sizes.height) * 2 + 1
+
+  controls.enablePan = true
+  document.body.style.cursor = 'auto'
+
+  raycaster.setFromCamera(mouse, camera)
+  const intersects = raycaster.intersectObjects( meshes )
+  if (intersects.length && intersects[0].object.userData.mode) {
+    controls.enablePan = false
+    document.body.style.cursor = 'pointer'
+
+    if (mousePress) {
+      const modeOrigin = viewer.params.mode
+
+      viewer.params.mode = 'segment'
+      renderer.setRenderTarget(bufferArray[0])
+      renderer.clear()
+      viewer.render()
+      viewer.params.mode = 'volume'
+      renderer.setRenderTarget(bufferArray[1])
+      renderer.clear()
+      viewer.render()
+      renderer.setRenderTarget(null)
+
+      viewer.params.mode = modeOrigin
+      tick()
+    }
+  }
 })
 
 init()
