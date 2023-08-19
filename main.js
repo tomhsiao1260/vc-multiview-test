@@ -7,6 +7,8 @@ import { MOUSE, TOUCH } from 'three'
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
+let viewer
+
 // Sizes
 const sizes = {
     width: window.innerWidth,
@@ -40,22 +42,20 @@ scene.add(ground)
 ground.position.set(0, -0.2, 0)
 ground.rotateX(-Math.PI / 2)
 
-// Test
-const mm = new ViewMaterial()
-const buffer = new THREE.WebGLRenderTarget(200, 200)
-mm.uniforms.uTexture.value = buffer.texture
-const cube = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mm)
-// const cube = new THREE.Mesh(new THREE.BoxGeometry(1, 0.01, 1), new THREE.MeshNormalMaterial())
-scene.add(cube)
-cube.rotateX(-Math.PI / 2)
+const buffer0 = new THREE.WebGLRenderTarget(200, 200)
+const buffer1 = new THREE.WebGLRenderTarget(200, 200)
+const buffer2 = new THREE.WebGLRenderTarget(200, 200)
+const bufferArray = [ buffer0, buffer1, buffer2 ]
 
-const meshes = [ ground, cube ]
+const meshes = [ ground ]
 
 // Renderer
 const canvas = document.querySelector('.webgl')
-const renderer = new THREE.WebGLRenderer({ canvas })
+const renderer = new THREE.WebGLRenderer({ antialias: true, canvas })
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setSize(sizes.width, sizes.height)
+renderer.setClearColor(0, 0)
+renderer.outputColorSpace = THREE.SRGBColorSpace
 
 // Controls
 const controls = new OrbitControls(camera, canvas)
@@ -76,10 +76,18 @@ window.addEventListener('mousedown', (event) => {
     const intersects = raycaster.intersectObjects( meshes )
     if (intersects.length) {
         const pos = intersects[0].point
-        const cube = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshNormalMaterial())
-        scene.add(cube)
-        cube.rotateX(-Math.PI / 2)
-        cube.position.set(pos.x, 0, pos.z)
+        const mm = new ViewMaterial()
+        const { mode } = viewer.params
+        if (mode === 'segment') { mm.uniforms.uTexture.value = bufferArray[0].texture }
+        if (mode === 'volume') { mm.uniforms.uTexture.value = bufferArray[0].texture }
+        if (mode === 'volume-segment') { mm.uniforms.uTexture.value = bufferArray[0].texture }
+        if (mode === 'layer') { mm.uniforms.uTexture.value = bufferArray[1].texture }
+        if (mode === 'grid layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
+
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mm)
+        scene.add(plane)
+        plane.rotateX(-Math.PI / 2)
+        plane.position.set(pos.x, 0, pos.z)
     }
 })
 
@@ -89,7 +97,7 @@ async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
 
-  const viewer = new ViewerCore({ volumeMeta, segmentMeta })
+  viewer = new ViewerCore({ volumeMeta, segmentMeta, renderer })
 
   update(viewer)
 }
@@ -143,7 +151,12 @@ async function modeA(viewer) {
   viewer.clear()
   const segment = viewer.updateSegment()
 
-  await segment.then(() => viewer.render())
+  await segment.then(() => {
+      renderer.setRenderTarget(bufferArray[0])
+      renderer.clear()
+      viewer.render()
+      renderer.setRenderTarget(null)
+    })
     .then(() => { console.log(`segment ${viewer.params.layers.select} is loaded`) })
 }
 
@@ -152,7 +165,12 @@ async function modeB(viewer) {
   viewer.clear()
   const volume = viewer.updateVolume()
 
-  await volume.then(() => viewer.render())
+  await volume.then(() => {
+      renderer.setRenderTarget(bufferArray[2])
+      renderer.clear()
+      viewer.render()
+      renderer.setRenderTarget(null)
+    })
     .then(() => { console.log(`volume ${viewer.params.layers.select} is loaded`) })
 }
 
@@ -168,26 +186,19 @@ async function modeC(viewer) {
     .then(() => viewer.clipSegment())
     .then(() => viewer.updateSegmentSDF())
     .then(() => {
-        viewer.renderer.setRenderTarget(buffer)
-        viewer.renderer.clear()
+        renderer.setRenderTarget(bufferArray[1])
+        renderer.clear()
         viewer.render()
-        viewer.renderer.setRenderTarget(null)
-        // Tick
-        const tick = () =>
-        {
-            // Update
-            // cube.rotation.y += 0.01
-
-            // Controls
-            controls.update()
-
-            // Render
-            viewer.renderer.render(scene, camera)
-
-            // Keep looping
-            window.requestAnimationFrame(tick)
-        }
-        tick()
+        renderer.setRenderTarget(null)
     })
     .then(() => { console.log(`volume-segment ${viewer.params.layers.select} is loaded`) })
 }
+
+// Tick
+const tick = () => {
+  controls.update()
+  renderer.render(scene, camera)
+  window.requestAnimationFrame(tick)
+}
+tick()
+
