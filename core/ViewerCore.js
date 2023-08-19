@@ -32,7 +32,7 @@ export default class ViewerCore {
     this.layerPass = new FullScreenQuad(new RenderSDFLayerMaterial())
 
     this.params = {}
-    this.params.mode = 'segment'
+    this.params.mode = 'layer'
     // this.params.mode = 'volume-segment'
     this.params.surface = 0.003
     this.params.layer = 0
@@ -55,7 +55,7 @@ export default class ViewerCore {
     this.camera.updateProjectionMatrix()
 
     const controls = new OrbitControls(this.camera, this.canvas)
-    controls.addEventListener('change', this.render)
+    // controls.addEventListener('change', this.render)
 
     // list all layer options
     for (let i = 0; i < this.volumeMeta.nrrd.length; i++) {

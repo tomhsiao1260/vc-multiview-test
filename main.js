@@ -34,13 +34,12 @@ const scene = new THREE.Scene()
 
 // Camera
 const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-camera.position.y = 3
+camera.position.z = 3
 scene.add(camera)
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({ color: 'gray' }))
 scene.add(ground)
-ground.position.set(0, -0.2, 0)
-ground.rotateX(-Math.PI / 2)
+ground.position.set(0, 0, -0.2)
 
 const buffer0 = new THREE.WebGLRenderTarget(200, 200)
 const buffer1 = new THREE.WebGLRenderTarget(200, 200)
@@ -57,12 +56,19 @@ renderer.setSize(sizes.width, sizes.height)
 renderer.setClearColor(0, 0)
 renderer.outputColorSpace = THREE.SRGBColorSpace
 
+const tick = () => {
+  renderer.setRenderTarget(null)
+  renderer.render(scene, camera)
+  console.log('hi')
+}
+
 // Controls
 const controls = new OrbitControls(camera, canvas)
 controls.target = new THREE.Vector3(0,0,0)
-controls.enableDamping = true
+controls.enableDamping = false
 
-controls.screenSpacePanning = false // pan orthogonal to world-space direction camera.up
+controls.addEventListener('change', tick)
+controls.screenSpacePanning = true // pan orthogonal to world-space direction camera.up
 controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
 controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_ROTATE }
 
@@ -79,15 +85,16 @@ window.addEventListener('mousedown', (event) => {
         const mm = new ViewMaterial()
         const { mode } = viewer.params
         if (mode === 'segment') { mm.uniforms.uTexture.value = bufferArray[0].texture }
-        if (mode === 'volume') { mm.uniforms.uTexture.value = bufferArray[0].texture }
-        if (mode === 'volume-segment') { mm.uniforms.uTexture.value = bufferArray[0].texture }
-        if (mode === 'layer') { mm.uniforms.uTexture.value = bufferArray[1].texture }
+        if (mode === 'volume') { mm.uniforms.uTexture.value = bufferArray[1].texture }
+        if (mode === 'volume-segment') { mm.uniforms.uTexture.value = bufferArray[2].texture }
+        if (mode === 'layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
         if (mode === 'grid layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
 
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mm)
         scene.add(plane)
-        plane.rotateX(-Math.PI / 2)
-        plane.position.set(pos.x, 0, pos.z)
+        plane.position.set(pos.x, pos.y, 0)
+
+        tick()
     }
 })
 
@@ -166,7 +173,7 @@ async function modeB(viewer) {
   const volume = viewer.updateVolume()
 
   await volume.then(() => {
-      renderer.setRenderTarget(bufferArray[2])
+      renderer.setRenderTarget(bufferArray[1])
       renderer.clear()
       viewer.render()
       renderer.setRenderTarget(null)
@@ -186,7 +193,7 @@ async function modeC(viewer) {
     .then(() => viewer.clipSegment())
     .then(() => viewer.updateSegmentSDF())
     .then(() => {
-        renderer.setRenderTarget(bufferArray[1])
+        renderer.setRenderTarget(bufferArray[2])
         renderer.clear()
         viewer.render()
         renderer.setRenderTarget(null)
@@ -194,11 +201,5 @@ async function modeC(viewer) {
     .then(() => { console.log(`volume-segment ${viewer.params.layers.select} is loaded`) })
 }
 
-// Tick
-const tick = () => {
-  controls.update()
-  renderer.render(scene, camera)
-  window.requestAnimationFrame(tick)
-}
-tick()
+renderer.render(scene, camera)
 
