@@ -41,9 +41,9 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBas
 scene.add(ground)
 ground.position.set(0, 0, -0.2)
 
-const buffer0 = new THREE.WebGLRenderTarget(200, 200)
-const buffer1 = new THREE.WebGLRenderTarget(200, 200)
-const buffer2 = new THREE.WebGLRenderTarget(200, 200)
+const buffer0 = new THREE.WebGLRenderTarget(500, 500)
+const buffer1 = new THREE.WebGLRenderTarget(500, 500)
+const buffer2 = new THREE.WebGLRenderTarget(500, 500)
 const bufferArray = [ buffer0, buffer1, buffer2 ]
 
 const meshes = [ ground ]
@@ -59,7 +59,6 @@ renderer.outputColorSpace = THREE.SRGBColorSpace
 const tick = () => {
   renderer.setRenderTarget(null)
   renderer.render(scene, camera)
-  console.log('hi')
 }
 
 // Controls
@@ -88,32 +87,47 @@ window.addEventListener('mouseup', (e) => {
   mousePress = false
 })
 
+const div = document.createElement('div')
+div.style.backgroundColor = 'rgba(0, 0, 0, 0.0)'
+// div.style.backgroundColor = 'rgba(255, 0, 0, 1)'
+div.style.border = '1px solid white';
+div.style.display = 'inline'
+div.style.position = 'absolute'
+document.body.appendChild(div)
+
 const mouse = new THREE.Vector2()
 const raycaster = new THREE.Raycaster()
 window.addEventListener('mousedown', (event) => {
     mouse.x = event.clientX / sizes.width * 2 - 1
     mouse.y = - (event.clientY / sizes.height) * 2 + 1
-    if (!spacePress) return
 
     raycaster.setFromCamera(mouse, camera)
     const intersects = raycaster.intersectObjects( meshes )
-    if (intersects.length) {
-        const pos = intersects[0].point
-        const mm = new ViewMaterial()
-        const { mode } = viewer.params
-        if (mode === 'segment') { mm.uniforms.uTexture.value = bufferArray[0].texture }
-        if (mode === 'volume') { mm.uniforms.uTexture.value = bufferArray[1].texture }
-        if (mode === 'volume-segment') { mm.uniforms.uTexture.value = bufferArray[2].texture }
-        if (mode === 'layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
-        if (mode === 'grid layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
+    if (!intersects.length) return
+    if (spacePress) {
+      const pos = intersects[0].point
+      const mm = new ViewMaterial()
+      const { mode } = viewer.params
+      if (mode === 'segment') { mm.uniforms.uTexture.value = bufferArray[0].texture }
+      if (mode === 'volume') { mm.uniforms.uTexture.value = bufferArray[1].texture }
+      if (mode === 'volume-segment') { mm.uniforms.uTexture.value = bufferArray[1].texture }
+      if (mode === 'layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
+      if (mode === 'grid layer') { mm.uniforms.uTexture.value = bufferArray[2].texture }
 
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mm)
-        plane.userData.mode = mode
-        scene.add(plane)
-        plane.position.set(pos.x, pos.y, 0)
-        meshes.push(plane)
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mm)
 
-        tick()
+      scene.add(plane)
+      plane.position.set(pos.x, pos.y, 0)
+      plane.userData.mode = mode
+      plane.userData.info = { center: plane.position.clone(), w: 1, h: 1 }
+      meshes.push(plane)
+
+      tick()
+      return
+    }
+    if (!intersects[0].object.userData.mode) {
+      div.style.display = 'none'
+      return
     }
 })
 window.addEventListener('mousemove', (event) => {
@@ -129,24 +143,42 @@ window.addEventListener('mousemove', (event) => {
     controls.enablePan = false
     document.body.style.cursor = 'pointer'
 
-    if (mousePress) {
-      const modeOrigin = viewer.params.mode
+    const { center, w, h } = intersects[0].object.userData.info
+    const bl = new THREE.Vector3(center.x - w / 2, center.y - h / 2, 0)
+    const tr = new THREE.Vector3(center.x + w / 2, center.y + h / 2, 0)
+    // bottom-left (-1, -1) top-right (1, 1)
+    const pbl = bl.clone().project(camera)
+    const ptr = tr.clone().project(camera)
+    div.style.left = `${ (pbl.x + 1) * sizes.width * 0.5 }px`
+    div.style.bottom = `${ (pbl.y + 1) * sizes.height * 0.5 }px`
+    div.style.width = `${ (ptr.x - pbl.x) * sizes.width * 0.5 }px`
+    div.style.height = `${ (ptr.y - pbl.y) * sizes.height * 0.5 }px`
+    div.style.display = 'inline'
 
-      viewer.params.mode = 'segment'
-      renderer.setRenderTarget(bufferArray[0])
-      renderer.clear()
-      viewer.render()
-      viewer.params.mode = 'volume'
-      renderer.setRenderTarget(bufferArray[1])
-      renderer.clear()
-      viewer.render()
-      renderer.setRenderTarget(null)
-
-      viewer.params.mode = modeOrigin
-      tick()
-    }
+    if (mousePress) { updateBuffer() }
   }
 })
+
+function updateBuffer() {
+  const modeOrigin = viewer.params.mode
+
+  viewer.params.mode = 'segment'
+  renderer.setRenderTarget(bufferArray[0])
+  renderer.clear()
+  viewer.render()
+  viewer.params.mode = 'volume-segment'
+  renderer.setRenderTarget(bufferArray[1])
+  renderer.clear()
+  viewer.render()
+  viewer.params.mode = 'layer'
+  renderer.setRenderTarget(bufferArray[2])
+  renderer.clear()
+  viewer.render()
+  renderer.setRenderTarget(null)
+
+  viewer.params.mode = modeOrigin
+  tick()
+}
 
 init()
 
@@ -154,7 +186,12 @@ async function init() {
   const volumeMeta = await Loader.getVolumeMeta()
   const segmentMeta = await Loader.getSegmentMeta()
 
-  viewer = new ViewerCore({ volumeMeta, segmentMeta, renderer })
+  viewer = new ViewerCore({ volumeMeta, segmentMeta, renderer, div })
+
+  viewer.controls.addEventListener('change', () => {
+    console.log('render')
+    updateBuffer()
+  })
 
   update(viewer)
 }
@@ -186,20 +223,20 @@ function updateGUI(viewer) {
   if (mode === 'segment') { return }
   if (mode === 'volume') { return }
   if (mode === 'volume-segment') {
-    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
+    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(updateBuffer)
   }
   if (mode === 'layer') {
     const id = viewer.params.layers.select
     const clip = viewer.volumeMeta.nrrd[id].clip
 
     viewer.params.layer = clip.z
-    gui.add(viewer.params, 'inverse').onChange(viewer.render)
-    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
-    gui.add(viewer.params, 'layer', clip.z, clip.z + clip.d, 1).onChange(viewer.render)
+    gui.add(viewer.params, 'inverse').onChange(updateBuffer)
+    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(updateBuffer)
+    gui.add(viewer.params, 'layer', clip.z, clip.z + clip.d, 1).onChange(updateBuffer)
   }
   if (mode === 'grid layer') {
-    gui.add(viewer.params, 'inverse').onChange(viewer.render)
-    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
+    gui.add(viewer.params, 'inverse').onChange(updateBuffer)
+    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(updateBuffer)
   }
 }
 

@@ -11,12 +11,13 @@ import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 import { RenderSDFLayerMaterial } from './RenderSDFLayerMaterial'
 
 export default class ViewerCore {
-  constructor({ volumeMeta, segmentMeta, renderer }) {
+  constructor({ volumeMeta, segmentMeta, renderer, div }) {
     this.scene = null
     this.camera = null
     this.clipGeometry = null
     this.focusGeometry = null
     this.bvh = null
+    this.controlDOM = div
 
     this.volumeList = {}
     this.segmentList = {}
@@ -32,7 +33,7 @@ export default class ViewerCore {
     this.layerPass = new FullScreenQuad(new RenderSDFLayerMaterial())
 
     this.params = {}
-    this.params.mode = 'layer'
+    this.params.mode = 'segment'
     // this.params.mode = 'volume-segment'
     this.params.surface = 0.003
     this.params.layer = 0
@@ -54,7 +55,8 @@ export default class ViewerCore {
     this.camera.far = 5
     this.camera.updateProjectionMatrix()
 
-    const controls = new OrbitControls(this.camera, this.canvas)
+    this.controls = new OrbitControls(this.camera, this.controlDOM)
+    // const controls = new OrbitControls(this.camera, this.canvas)
     // controls.addEventListener('change', this.render)
 
     // list all layer options
